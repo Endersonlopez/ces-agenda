@@ -7,6 +7,7 @@ import {
   FlatList,
   TouchableOpacity,
   Alert,
+  RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../constants/colors';
@@ -35,20 +36,19 @@ export default function AgendaDiariaScreen({ navigation }) {
     return getWeekDays(weekInfo.weekNumber, weekInfo.weekYear);
   }, [weekInfo.weekNumber, weekInfo.weekYear]);
 
-  // Día seleccionado por defecto (primer día o coincidente con hoy si está dentro de la semana)
+  // Día seleccionado por defecto
   const [selectedDateStr, setSelectedDateStr] = useState(() => {
     const today = new Date().toISOString().split('T')[0];
     const found = weekDays.find((d) => d.dateStr === today);
     return found ? found.dateStr : weekDays[0]?.dateStr;
   });
 
-  // Asegurar que selectedDateStr pertenezca a la semana seleccionada
   const activeDay = useMemo(() => {
     const found = weekDays.find((d) => d.dateStr === selectedDateStr);
     return found || weekDays[0];
   }, [weekDays, selectedDateStr]);
 
-  // Conteo de actividades por fecha para los badges de los días
+  // Conteo de actividades por fecha para los badges
   const activityCountsByDate = useMemo(() => {
     const map = {};
     for (const act of activities) {
@@ -57,14 +57,14 @@ export default function AgendaDiariaScreen({ navigation }) {
     return map;
   }, [activities]);
 
-  // Filtrar actividades del día seleccionado y aplicar ordenamiento CRONOLÓGICO INVERSO (17:30 arriba, 08:00 abajo)
+  // Filtrar actividades del día seleccionado (orden inverso)
   const dailyActivities = useMemo(() => {
     if (!activeDay) return [];
     const filtered = activities.filter((act) => act.fecha === activeDay.dateStr);
     return sortActivitiesInverse(filtered);
   }, [activities, activeDay]);
 
-  // Estado del modal de creación/edición
+  // Estado del modal
   const [modalVisible, setModalVisible] = useState(false);
   const [activityToEdit, setActivityToEdit] = useState(null);
 
@@ -86,16 +86,13 @@ export default function AgendaDiariaScreen({ navigation }) {
   const handleSaveActivity = async (activityData) => {
     try {
       if (activityToEdit) {
-        // Modo Edición
         await updateActivity(activityToEdit.id, activityData);
       } else {
-        // Modo Creación en Agenda Diaria:
-        // Requerimiento: "Si se agrega una nueva en el mismo día, marcar como 'No planificada'".
         const newAct = {
           ...activityData,
           fecha: activeDay.dateStr,
           diaSemana: activeDay.dayName,
-          esPlanificada: false, // Marcada estrictamente como no planificada / no agendada
+          esPlanificada: false,
         };
         await addActivity(newAct);
       }
@@ -107,7 +104,7 @@ export default function AgendaDiariaScreen({ navigation }) {
 
   const handleDeleteActivity = (activity) => {
     Alert.alert(
-      'Confirmar Eliminación',
+      'Confirmar eliminación',
       `¿Desea eliminar la actividad "${activity.titulo}"?`,
       [
         { text: 'Cancelar', style: 'cancel' },
@@ -126,24 +123,61 @@ export default function AgendaDiariaScreen({ navigation }) {
     );
   };
 
+  // Toggle de estado con actualización optimista para evitar que "se trabe"
+  const [pendingToggleIds, setPendingToggleIds] = useState(new Set());
+
+  const handleToggleStatus = async (activity) => {
+    if (pendingToggleIds.has(activity.id)) return; // Evitar doble toque
+
+    const isCompleted = activity.estado === 'Cumplida';
+    const newStatus = isCompleted ? 'Pendiente' : 'Cumplida';
+
+    setPendingToggleIds((prev) => new Set(prev).add(activity.id));
+    try {
+      await updateActivity(activity.id, { ...activity, estado: newStatus });
+    } catch (e) {
+      Alert.alert('Error', 'No se pudo actualizar el estado.');
+    } finally {
+      setPendingToggleIds((prev) => {
+        const next = new Set(prev);
+        next.delete(activity.id);
+        return next;
+      });
+    }
+  };
+
+  // Deslizar hacia abajo para actualizar y ordenar actividades
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshActivities();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
-      {/* Cabecera global con logo posicionado estrictamente sobre el avatar */}
-      <GlobalHeader title="Agenda Diaria" navigation={navigation} />
+      <GlobalHeader title="Agenda diaria" navigation={navigation} />
 
       <FlatList
         data={dailyActivities}
         keyExtractor={(item) => item.id}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={[COLORS.primary]}
+            tintColor={COLORS.primary}
+          />
+        }
         ListHeaderComponent={
           <View>
-            {/* Selector de semanas con flechas */}
             <WeekSelector />
-
-            {/* Dashboard superior con 4 tarjetas de resumen */}
             <DashboardCards />
-
-            {/* Selector de días Lunes a Sábado */}
             <DaySelector
               days={weekDays}
               selectedDateStr={activeDay?.dateStr}
@@ -151,26 +185,24 @@ export default function AgendaDiariaScreen({ navigation }) {
               activityCountsByDate={activityCountsByDate}
             />
 
-            {/* Título de la sección del día actual con botón de acción */}
             <View style={styles.sectionHeader}>
               <View style={styles.dayInfoLeft}>
                 <Text style={styles.dayTitle}>
-                  {activeDay ? activeDay.formattedDisplay : 'Día Seleccionado'}
+                  {activeDay ? activeDay.formattedDisplay : 'Día seleccionado'}
                 </Text>
                 <Text style={styles.sortNoticeText}>
                   Orden cronológico inverso (última a primera)
                 </Text>
               </View>
 
-              {/* Botón limpio sin '+' */}
               <TouchableOpacity
                 onPress={handleOpenAddModal}
                 style={styles.addButton}
                 activeOpacity={0.8}
-                accessibilityLabel="Nueva Actividad"
+                accessibilityLabel="Nueva actividad"
               >
                 <Ionicons name="add-circle-outline" size={17} color={COLORS.surface} style={styles.addBtnIcon} />
-                <Text style={styles.addButtonText}>Nueva Actividad</Text>
+                <Text style={styles.addButtonText}>Nueva actividad</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -180,6 +212,8 @@ export default function AgendaDiariaScreen({ navigation }) {
             activity={item}
             onEdit={handleOpenEditModal}
             onDelete={handleDeleteActivity}
+            onToggleStatus={handleToggleStatus}
+            isTogglePending={pendingToggleIds.has(item.id)}
           />
         )}
         ListEmptyComponent={
@@ -190,20 +224,20 @@ export default function AgendaDiariaScreen({ navigation }) {
             <Text style={styles.emptyTitle}>Sin actividades en este día</Text>
             <Text style={styles.emptySubtitle}>
               Las actividades planificadas previamente se cargan automáticamente aquí.
-              También puede registrar una actividad no agendada presionando el botón "Nueva Actividad".
+              También puede registrar una actividad no agendada presionando el botón "Nueva actividad".
             </Text>
           </View>
         }
         contentContainerStyle={styles.listContent}
       />
 
-      {/* Modal para Crear y Editar Actividades */}
       <ActivityModal
         visible={modalVisible}
         activityToEdit={activityToEdit}
         defaultDateStr={activeDay?.dateStr}
         defaultDayName={activeDay?.dayName}
         defaultIsPlanificada={false}
+        activitiesForValidation={dailyActivities}
         onSave={handleSaveActivity}
         onClose={handleCloseModal}
       />

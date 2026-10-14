@@ -1,13 +1,18 @@
 // Tipos y estados estandarizados de actividades
 export const ACTIVITY_TYPES = [
-  'Mantenimiento Preventivo',
-  'Mantenimiento Correctivo',
-  'Instalación y Configuración',
-  'Soporte Técnico',
-  'Capacitación y Asesoría',
-  'Diagnóstico y Evaluación',
-  'Entrega de Equipos',
-  'Atención de Garantía',
+  'Administrativo',
+  'Atención al cliente',
+  'Atención de garantía',
+  'Capacitación y asesoría',
+  'Cotización',
+  'Diagnóstico y evaluación',
+  'Ensamble',
+  'Entrega de equipos',
+  'Instalación y configuración',
+  'Mantenimiento correctivo',
+  'Mantenimiento preventivo',
+  'Reparación',
+  'Soporte técnico',
   'Otro',
 ];
 

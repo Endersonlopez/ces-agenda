@@ -12,7 +12,7 @@ import {
   getNotificationSettings,
   saveNotificationSettings,
 } from '../storage/notificationStorage';
-import { setupScheduledNotifications } from '../services/notificationService';
+import { setupScheduledNotifications, rescheduleAllActivityReminders } from '../services/notificationService';
 import {
   getISOWeekAndYear,
   getWeekKey,
@@ -120,18 +120,25 @@ export function AppProvider({ children }) {
   const handleAddActivity = async (activityData, targetWeekKey = currentWeekKey) => {
     const created = await addActivity(targetWeekKey, activityData);
     await refreshActivities();
+    // Reprogramar recordatorios con la lista actualizada
+    const updated = await getActivitiesByWeek(currentWeekKey);
+    rescheduleAllActivityReminders(updated).catch(console.warn);
     return created;
   };
 
   const handleUpdateActivity = async (activityId, updatedFields, targetWeekKey = currentWeekKey) => {
     const updated = await updateActivity(targetWeekKey, activityId, updatedFields);
     await refreshActivities();
+    const updatedList = await getActivitiesByWeek(currentWeekKey);
+    rescheduleAllActivityReminders(updatedList).catch(console.warn);
     return updated;
   };
 
   const handleDeleteActivity = async (activityId, targetWeekKey = currentWeekKey) => {
     await deleteActivity(targetWeekKey, activityId);
     await refreshActivities();
+    const updatedList = await getActivitiesByWeek(currentWeekKey);
+    rescheduleAllActivityReminders(updatedList).catch(console.warn);
   };
 
   // Gestión de notificaciones

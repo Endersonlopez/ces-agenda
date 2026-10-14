@@ -1,8 +1,8 @@
 // Servicio de exportación de reporte estructurado para WhatsApp (Sin emojis)
-import { Linking, Alert, Platform } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import * as Sharing from 'expo-sharing';
-import * as FileSystem from 'expo-file-system';
-import { formatDateToDMY } from '../utils/dateUtils';
+import * as FileSystemLegacy from 'expo-file-system/legacy';
+import { formatTo12Hour } from '../utils/timeValidation';
 
 /**
  * Genera el texto plano estructurado del reporte para WhatsApp
@@ -21,13 +21,11 @@ export function buildWhatsAppReportText({
 }) {
   const lines = [];
 
-  lines.push('========================================');
-  lines.push('AGENDA CES - REPORTE DE ACTIVIDADES');
-  lines.push('========================================');
-  lines.push(`Tecnico: ${(profile.nombre || '')} ${(profile.apellido || '')}`.trim());
-  lines.push(`Perfil: ${profile.perfil || 'General'}`);
-  lines.push(`Periodo: ${weekLabel}`);
-  lines.push('========================================\n');
+  lines.push('Agenda CES - Reporte de actividades');
+  lines.push(`Técnico: ${(profile?.nombre || '')} ${(profile?.apellido || '')}`.trim());
+  lines.push(`Perfil: ${profile?.perfil || 'General'}`);
+  lines.push(`Período: ${weekLabel}`);
+  lines.push('');
 
   // Filtrar actividades por las fechas seleccionadas
   const filtered = activities.filter((act) =>
@@ -35,7 +33,7 @@ export function buildWhatsAppReportText({
   );
 
   if (filtered.length === 0) {
-    lines.push('No hay actividades registradas en los dias seleccionados.');
+    lines.push('No hay actividades registradas en los días seleccionados.');
     return lines.join('\n');
   }
 
@@ -54,47 +52,37 @@ export function buildWhatsAppReportText({
     if (dayActivities.length === 0) continue;
 
     const first = dayActivities[0];
-    const dayHeader = `--- ${first.diaSemana ? first.diaSemana.toUpperCase() : 'DIA'} (${formatDateToDMY(dateStr)}) ---`;
-    lines.push(dayHeader);
+    lines.push(first.diaSemana ? first.diaSemana : 'Día');
 
-    // Ordenar actividades por hora
+    // Ordenar actividades cronológicamente de temprano a tarde
     const sorted = [...dayActivities].sort((a, b) => a.horaInicio.localeCompare(b.horaInicio));
 
     sorted.forEach((act, idx) => {
-      const planStatus = act.esPlanificada ? 'PLANIFICADA' : 'NO AGENDADA';
-      const statusTag = act.estado ? `[${act.estado.toUpperCase()}]` : '[PENDIENTE]';
-
-      lines.push(`${idx + 1}. Horario: ${act.horaInicio} - ${act.horaFin}`);
+      const horaStr = `${formatTo12Hour(act.horaInicio)} a ${formatTo12Hour(act.horaFin)}`;
+      lines.push(`${idx + 1}. Horario: ${horaStr}`);
       lines.push(`   Actividad: ${act.titulo}`);
-      if (act.clienteOT) lines.push(`   Cliente / OT: ${act.clienteOT}`);
+      if (act.clienteOT) lines.push(`   Cliente / OT / LLS: ${act.clienteOT}`);
       if (act.tipo) lines.push(`   Tipo: ${act.tipo}`);
-      lines.push(`   Origen: ${planStatus}`);
-      lines.push(`   Estado: ${statusTag}`);
+      lines.push(`   Origen: ${act.esPlanificada ? 'Planificada' : 'No agendada'}`);
+      lines.push(`   Estado: ${act.estado || 'Pendiente'}`);
 
-      if (act.resultadoReal) {
-        lines.push(`   Resultado: ${act.resultadoReal}`);
+      if (act.comentario && act.comentario.trim()) {
+        lines.push(`   Comentarios: ${act.comentario.trim()}`);
       }
 
-      if (act.estado === 'No cumplida' && act.justificacion) {
-        lines.push(`   Justificacion Obligatoria: ${act.justificacion}`);
+      if (act.estado === 'No cumplida' && act.observacion && act.observacion.trim()) {
+        lines.push(`   Observaciones: ${act.observacion.trim()}`);
       }
 
       if (act.reprogramacion && act.reprogramacion !== 'No') {
-        lines.push(`   Reprogramacion: ${act.reprogramacion}`);
-      }
-
-      if (act.observacion) {
-        lines.push(`   Observacion / Evidencia: ${act.observacion}`);
+        lines.push(`   Reprogramación: ${act.reprogramacion}`);
       }
 
       lines.push('');
     });
   }
 
-  lines.push('========================================');
-  lines.push('Fin del reporte Agenda CES.');
-
-  return lines.join('\n');
+  return lines.join('\n').trim();
 }
 
 /**
@@ -120,24 +108,23 @@ export async function shareViaWhatsApp(reportText) {
     }
 
     // Si WhatsApp no está instalado en el dispositivo, guardar archivo de texto y compartir
-    const tempFileUri = `${FileSystem.cacheDirectory}Reporte_Agenda_CES.txt`;
-    await FileSystem.writeAsStringAsync(tempFileUri, reportText, {
-      encoding: FileSystem.EncodingType.UTF8,
+    const dir = FileSystemLegacy.cacheDirectory || FileSystemLegacy.documentDirectory;
+    const tempFileUri = `${dir}Reporte_Agenda_CES.txt`;
+    await FileSystemLegacy.writeAsStringAsync(tempFileUri, reportText, {
+      encoding: FileSystemLegacy.EncodingType.UTF8,
     });
 
     if (await Sharing.isAvailableAsync()) {
       await Sharing.shareAsync(tempFileUri, {
         mimeType: 'text/plain',
-        dialogTitle: 'Compartir Reporte Agenda CES',
+        dialogTitle: 'Compartir reporte Agenda CES',
       });
       return { success: true, method: 'sharing' };
     }
 
-    Alert.alert('Información', 'No se detectó WhatsApp. El texto ha sido copiado o preparado.');
-    return { success: false, method: 'none' };
+    return { success: false, error: 'No se pudo abrir WhatsApp ni compartir el archivo.' };
   } catch (error) {
-    console.error('Error al exportar a WhatsApp:', error);
-    Alert.alert('Error', 'No fue posible abrir WhatsApp directamente.');
-    return { success: false, error };
+    console.error('Error al compartir por WhatsApp:', error);
+    throw error;
   }
 }

@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../constants/colors';
 import { formatTo12Hour } from '../utils/timeValidation';
 
-export default function ActivityCard({ activity, onEdit, onDelete }) {
+export default function ActivityCard({ activity, onEdit, onDelete, onToggleStatus, isTogglePending = false }) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const isCompleted = activity.estado === 'Cumplida';
@@ -29,6 +29,15 @@ export default function ActivityCard({ activity, onEdit, onDelete }) {
 
   const timeRange12 = `${formatTo12Hour(activity.horaInicio)} - ${formatTo12Hour(activity.horaFin)}`;
 
+  const handleToggleStatus = () => {
+    if (onToggleStatus && !isTogglePending) {
+      onToggleStatus(activity);
+    }
+  };
+
+  // El badge de estado es tocable solo si se pasó el callback onToggleStatus
+  const canToggle = Boolean(onToggleStatus);
+
   return (
     <View style={[styles.card, { borderLeftColor: statusColor }]}>
       {/* Fila superior: Horario y Tags */}
@@ -36,7 +45,7 @@ export default function ActivityCard({ activity, onEdit, onDelete }) {
         <View style={styles.timeTag}>
           <Ionicons name="time-outline" size={13} color={COLORS.primary} style={styles.timeIcon} />
           <Text style={styles.timeText}>
-            {activity.horaInicio} - {activity.horaFin} ({timeRange12})
+            {timeRange12}
           </Text>
         </View>
 
@@ -58,13 +67,18 @@ export default function ActivityCard({ activity, onEdit, onDelete }) {
             </Text>
           </View>
 
-          {/* Badge de Estado */}
-          <View style={[styles.statusBadge, { backgroundColor: statusBg }]}>
+          {/* Badge de Estado: interactivo solo en Agenda Diaria (cuando se pasa onToggleStatus) */}
+          <TouchableOpacity
+            style={[styles.statusBadge, { backgroundColor: statusBg, opacity: isTogglePending ? 0.6 : 1 }]}
+            onPress={handleToggleStatus}
+            activeOpacity={canToggle ? 0.7 : 1}
+            disabled={!canToggle || isTogglePending}
+          >
             <Ionicons name={statusIcon} size={12} color={statusColor} style={styles.statusIconStyle} />
             <Text style={[styles.statusBadgeText, { color: statusColor }]}>
               {activity.estado || 'Pendiente'}
             </Text>
-          </View>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -92,27 +106,20 @@ export default function ActivityCard({ activity, onEdit, onDelete }) {
         ) : null}
       </View>
 
-      {/* Justificación obligatoria destacada si es No cumplida */}
-      {isIncompleted && activity.justificacion ? (
+      {/* Observación destacada si es No cumplida */}
+      {isIncompleted && activity.observacion ? (
         <View style={styles.justificationBox}>
           <View style={styles.justificationHeader}>
             <Ionicons name="alert-circle-outline" size={14} color={COLORS.danger} style={styles.alertIcon} />
-            <Text style={styles.justificationTitle}>Justificación Obligatoria:</Text>
+            <Text style={styles.justificationTitle}>Observaciones:</Text>
           </View>
-          <Text style={styles.justificationBody}>{activity.justificacion}</Text>
+          <Text style={styles.justificationBody}>{activity.observacion}</Text>
         </View>
       ) : null}
 
       {/* Sección expandible para detalles adicionales */}
       {isExpanded && (
         <View style={styles.expandedContent}>
-          {activity.resultadoReal ? (
-            <View style={styles.detailBlock}>
-              <Text style={styles.detailLabel}>Resultado Real:</Text>
-              <Text style={styles.detailText}>{activity.resultadoReal}</Text>
-            </View>
-          ) : null}
-
           {activity.reprogramacion && activity.reprogramacion !== 'No' ? (
             <View style={styles.detailBlock}>
               <Text style={styles.detailLabel}>Reprogramación:</Text>
@@ -120,9 +127,9 @@ export default function ActivityCard({ activity, onEdit, onDelete }) {
             </View>
           ) : null}
 
-          {activity.observacion ? (
+          {!isIncompleted && activity.observacion ? (
             <View style={styles.detailBlock}>
-              <Text style={styles.detailLabel}>Observación / Evidencia:</Text>
+              <Text style={styles.detailLabel}>Observaciones:</Text>
               <Text style={styles.detailText}>{activity.observacion}</Text>
             </View>
           ) : null}

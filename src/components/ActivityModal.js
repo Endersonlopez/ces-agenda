@@ -14,20 +14,25 @@ import {
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+
 import { COLORS } from '../constants/colors';
 import { ACTIVITY_TYPES, ACTIVITY_STATUS, REPROGRAMMING_OPTIONS } from '../constants/types';
-import { validateActivityTimes, formatTo12Hour } from '../utils/timeValidation';
+import { validateActivityTimes, checkTimeOverlap, formatTo12Hour } from '../utils/timeValidation';
 import CustomTimePicker from './CustomTimePicker';
 
 export default function ActivityModal({
   visible,
-  activityToEdit = null, // si es null -> modo Crear, si tiene objeto -> modo Editar
+  activityToEdit = null,
   defaultDateStr,
   defaultDayName,
   defaultIsPlanificada = false,
+  activitiesForValidation = [], // actividades del mismo día para validar solapamiento
   onSave,
   onClose,
 }) {
+  const insets = useSafeAreaInsets();
+  
   // Estados del formulario
   const [titulo, setTitulo] = useState('');
   const [clienteOT, setClienteOT] = useState('');
@@ -35,10 +40,9 @@ export default function ActivityModal({
   const [horaInicio, setHoraInicio] = useState('08:00');
   const [horaFin, setHoraFin] = useState('10:00');
   const [estado, setEstado] = useState(ACTIVITY_STATUS.PENDING);
-  const [justificacion, setJustificacion] = useState('');
   const [reprogramacion, setReprogramacion] = useState('No');
-  const [resultadoReal, setResultadoReal] = useState('');
   const [observacion, setObservacion] = useState('');
+  const [comentario, setComentario] = useState('');
   const [esPlanificada, setEsPlanificada] = useState(defaultIsPlanificada);
 
   // Estados para selectores de tiempo exclusivos
@@ -53,10 +57,9 @@ export default function ActivityModal({
       setHoraInicio(activityToEdit.horaInicio || '08:00');
       setHoraFin(activityToEdit.horaFin || '10:00');
       setEstado(activityToEdit.estado || ACTIVITY_STATUS.PENDING);
-      setJustificacion(activityToEdit.justificacion || '');
       setReprogramacion(activityToEdit.reprogramacion || 'No');
-      setResultadoReal(activityToEdit.resultadoReal || '');
       setObservacion(activityToEdit.observacion || '');
+      setComentario(activityToEdit.comentario || '');
       setEsPlanificada(activityToEdit.esPlanificada !== undefined ? activityToEdit.esPlanificada : defaultIsPlanificada);
     } else {
       setTitulo('');
@@ -65,34 +68,48 @@ export default function ActivityModal({
       setHoraInicio('08:00');
       setHoraFin('10:00');
       setEstado(ACTIVITY_STATUS.PENDING);
-      setJustificacion('');
       setReprogramacion('No');
-      setResultadoReal('');
       setObservacion('');
+      setComentario('');
       setEsPlanificada(defaultIsPlanificada);
     }
   }, [activityToEdit, visible, defaultIsPlanificada]);
 
-  // Manejo de guardado con validaciones estrictas
+  // Manejo de guardado con validaciones
   const handleValidateAndSave = () => {
     // 1. Título obligatorio
     if (!titulo.trim()) {
-      Alert.alert('Campo Requerido', 'Debe ingresar la descripción o título de la actividad.');
+      Alert.alert('Campo requerido', 'Debe ingresar la descripción o título de la actividad.');
       return;
     }
 
-    // 2. Validación estricta de tiempos: inicio < fin, jornada máxima 17:30
+    // 2. Validación: inicio < fin
     const timeCheck = validateActivityTimes(horaInicio, horaFin);
     if (!timeCheck.isValid) {
-      Alert.alert('Horario Inválido', timeCheck.error);
+      Alert.alert('Horario inválido', timeCheck.error);
       return;
     }
 
-    // 3. Validación obligatoria de justificación si es 'No cumplida'
-    if (estado === ACTIVITY_STATUS.INCOMPLETED && !justificacion.trim()) {
+    // 3. Validación de solapamiento con actividades existentes del mismo día
+    const overlapCheck = checkTimeOverlap(
+      horaInicio,
+      horaFin,
+      activitiesForValidation,
+      activityToEdit ? activityToEdit.id : null
+    );
+    if (overlapCheck.hasOverlap) {
       Alert.alert(
-        'Justificación Obligatoria',
-        'Al marcar la actividad como "No cumplida", es obligatorio ingresar una justificación detallada.'
+        'Horario en conflicto',
+        `El horario se solapa con "${overlapCheck.conflictTitle}". No pueden realizarse dos actividades al mismo tiempo.`
+      );
+      return;
+    }
+
+    // 4. Observación obligatoria si es 'No cumplida' y no es planificada
+    if (!esPlanificada && estado === ACTIVITY_STATUS.INCOMPLETED && !observacion.trim()) {
+      Alert.alert(
+        'Observación obligatoria',
+        'Al marcar la actividad como "No cumplida", es obligatorio ingresar una observación.'
       );
       return;
     }
@@ -107,11 +124,10 @@ export default function ActivityModal({
       horaInicio,
       horaFin,
       hora: `${horaInicio} - ${horaFin}`,
-      estado,
-      justificacion: justificacion.trim(),
-      reprogramacion,
-      resultadoReal: resultadoReal.trim(),
-      observacion: observacion.trim(),
+      estado: esPlanificada ? ACTIVITY_STATUS.PENDING : estado,
+      reprogramacion: (!esPlanificada && estado === ACTIVITY_STATUS.INCOMPLETED) ? reprogramacion : 'No',
+      observacion: (!esPlanificada && estado === ACTIVITY_STATUS.INCOMPLETED) ? observacion.trim() : '',
+      comentario: comentario.trim(),
       esPlanificada,
     };
 
@@ -119,6 +135,7 @@ export default function ActivityModal({
   };
 
   const isEditing = Boolean(activityToEdit);
+  const showNotRealizedFields = !esPlanificada && estado === ACTIVITY_STATUS.INCOMPLETED;
 
   return (
     <Modal
@@ -129,7 +146,8 @@ export default function ActivityModal({
     >
       <KeyboardAvoidingView
         style={styles.modalOverlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 25}
       >
         <View style={styles.modalSheet}>
           {/* Cabecera del modal */}
@@ -142,7 +160,7 @@ export default function ActivityModal({
                 style={styles.modalHeaderIcon}
               />
               <Text style={styles.modalTitle}>
-                {isEditing ? 'Editar Actividad' : 'Registrar Actividad'}
+                {isEditing ? 'Editar actividad' : 'Registrar actividad'}
               </Text>
             </View>
 
@@ -153,12 +171,12 @@ export default function ActivityModal({
 
           <ScrollView
             style={styles.formScroll}
+            contentContainerStyle={styles.formScrollContent}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-            {/* Campo: Título de la actividad (SIN PLACEHOLDER) */}
             <View style={styles.formGroup}>
-              <Text style={styles.fieldLabel}>Actividad o Tarea Principal *</Text>
+              <Text style={styles.fieldLabel}>Actividad o tarea principal *</Text>
               <TextInput
                 style={styles.textInput}
                 value={titulo}
@@ -167,7 +185,6 @@ export default function ActivityModal({
               />
             </View>
 
-            {/* Campo: Cliente / OT / LLS (SIN PLACEHOLDER) */}
             <View style={styles.formGroup}>
               <Text style={styles.fieldLabel}>Cliente / OT / LLS</Text>
               <TextInput
@@ -177,9 +194,8 @@ export default function ActivityModal({
               />
             </View>
 
-            {/* Campo: Tipo de actividad (Picker) */}
             <View style={styles.formGroup}>
-              <Text style={styles.fieldLabel}>Tipo de Servicio o Actividad</Text>
+              <Text style={styles.fieldLabel}>Tipo de servicio o actividad</Text>
               <View style={styles.pickerContainer}>
                 <Picker
                   selectedValue={tipo}
@@ -194,17 +210,15 @@ export default function ActivityModal({
               </View>
             </View>
 
-            {/* Selección estricta de Horarios (Exclusivamente selectores, no texto libre) */}
             <View style={styles.timeSectionBox}>
-              <Text style={styles.sectionHeaderTitle}>Horario de Ejecución</Text>
+              <Text style={styles.sectionHeaderTitle}>Horario de ejecución</Text>
               <Text style={styles.sectionHeaderSubtitle}>
-                Validación: Inicio anterior a Fin | Jornada máxima hasta las 17:30
+                Validación: Inicio anterior a Fin
               </Text>
 
               <View style={styles.timeButtonsRow}>
-                {/* Selector Hora Inicio */}
                 <View style={styles.timeColumn}>
-                  <Text style={styles.timeFieldLabel}>Hora de Inicio</Text>
+                  <Text style={styles.timeFieldLabel}>Hora de inicio</Text>
                   <TouchableOpacity
                     onPress={() => setTimePickerTarget('inicio')}
                     style={styles.timeSelectBtn}
@@ -218,14 +232,12 @@ export default function ActivityModal({
                   </TouchableOpacity>
                 </View>
 
-                {/* Separador visual */}
                 <View style={styles.timeArrowDivider}>
                   <Ionicons name="arrow-forward" size={18} color={COLORS.primary} />
                 </View>
 
-                {/* Selector Hora Fin */}
                 <View style={styles.timeColumn}>
-                  <Text style={styles.timeFieldLabel}>Hora de Fin</Text>
+                  <Text style={styles.timeFieldLabel}>Hora de fin</Text>
                   <TouchableOpacity
                     onPress={() => setTimePickerTarget('fin')}
                     style={styles.timeSelectBtn}
@@ -241,105 +253,88 @@ export default function ActivityModal({
               </View>
             </View>
 
-            {/* Estado de la actividad */}
-            <View style={styles.formGroup}>
-              <Text style={styles.fieldLabel}>Estado de la Actividad</Text>
-              <View style={styles.statusButtonsGroup}>
-                {Object.values(ACTIVITY_STATUS).map((st) => {
-                  const isSelected = estado === st;
-                  let activeBg = COLORS.primary;
-                  if (st === ACTIVITY_STATUS.COMPLETED) activeBg = COLORS.success;
-                  if (st === ACTIVITY_STATUS.INCOMPLETED) activeBg = COLORS.danger;
+            {!esPlanificada && (
+              <View style={styles.formGroup}>
+                <Text style={styles.fieldLabel}>Estado de la actividad</Text>
+                <View style={styles.statusButtonsGroup}>
+                  {Object.values(ACTIVITY_STATUS).map((st) => {
+                    const isSelected = estado === st;
+                    let activeBg = COLORS.primary;
+                    if (st === ACTIVITY_STATUS.COMPLETED) activeBg = COLORS.success;
+                    if (st === ACTIVITY_STATUS.INCOMPLETED) activeBg = COLORS.danger;
 
-                  return (
-                    <TouchableOpacity
-                      key={st}
-                      onPress={() => setEstado(st)}
-                      style={[
-                        styles.statusBtn,
-                        isSelected
-                          ? { backgroundColor: activeBg, borderColor: activeBg }
-                          : styles.statusBtnInactive,
-                      ]}
-                      activeOpacity={0.7}
-                    >
-                      <Text
+                    return (
+                      <TouchableOpacity
+                        key={st}
+                        onPress={() => setEstado(st)}
                         style={[
-                          styles.statusBtnText,
-                          isSelected ? styles.statusBtnTextActive : styles.statusBtnTextInactive,
+                          styles.statusBtn,
+                          isSelected
+                            ? { backgroundColor: activeBg, borderColor: activeBg }
+                            : styles.statusBtnInactive,
                         ]}
+                        activeOpacity={0.7}
                       >
-                        {st}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-
-            {/* Justificación OBLIGATORIA si el estado es 'No cumplida' */}
-            {estado === ACTIVITY_STATUS.INCOMPLETED && (
-              <View style={[styles.formGroup, styles.mandatoryJustificationBlock]}>
-                <View style={styles.mandatoryHeaderRow}>
-                  <Ionicons name="warning-outline" size={16} color={COLORS.danger} />
-                  <Text style={styles.mandatoryLabel}>
-                    Justificación de Incumplimiento (Obligatoria) *
-                  </Text>
+                        <Text
+                          style={[
+                            styles.statusBtnText,
+                            isSelected ? styles.statusBtnTextActive : styles.statusBtnTextInactive,
+                          ]}
+                        >
+                          {st}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
-                <TextInput
-                  style={[styles.textInput, styles.mandatoryInput]}
-                  value={justificacion}
-                  onChangeText={setJustificacion}
-                  multiline
-                  numberOfLines={3}
-                />
               </View>
             )}
 
-            {/* Reprogramación */}
-            <View style={styles.formGroup}>
-              <Text style={styles.fieldLabel}>Reprogramación</Text>
-              <View style={styles.pickerContainer}>
-                <Picker
-                  selectedValue={reprogramacion}
-                  onValueChange={(val) => setReprogramacion(val)}
-                  style={styles.pickerStyle}
-                  dropdownIconColor={COLORS.primary}
-                >
-                  {REPROGRAMMING_OPTIONS.map((opt) => (
-                    <Picker.Item key={opt} label={opt} value={opt} />
-                  ))}
-                </Picker>
-              </View>
-            </View>
+            {showNotRealizedFields && (
+              <>
+                <View style={styles.formGroup}>
+                  <Text style={styles.fieldLabel}>Reprogramación</Text>
+                  <View style={styles.pickerContainer}>
+                    <Picker
+                      selectedValue={reprogramacion}
+                      onValueChange={(val) => setReprogramacion(val)}
+                      style={styles.pickerStyle}
+                      dropdownIconColor={COLORS.primary}
+                    >
+                      {REPROGRAMMING_OPTIONS.map((opt) => (
+                        <Picker.Item key={opt} label={opt} value={opt} />
+                      ))}
+                    </Picker>
+                  </View>
+                </View>
 
-            {/* Campo: Resultado real (SIN PLACEHOLDER) */}
+                <View style={styles.formGroup}>
+                  <Text style={styles.fieldLabel}>Observaciones *</Text>
+                  <TextInput
+                    style={[styles.textInput, styles.textArea]}
+                    value={observacion}
+                    onChangeText={setObservacion}
+                    multiline
+                    numberOfLines={2}
+                  />
+                </View>
+              </>
+            )}
+
+            {/* Campo Comentarios: siempre visible, sin placeholder */}
             <View style={styles.formGroup}>
-              <Text style={styles.fieldLabel}>Resultado Real Obtenido</Text>
+              <Text style={styles.fieldLabel}>Comentarios</Text>
               <TextInput
                 style={[styles.textInput, styles.textArea]}
-                value={resultadoReal}
-                onChangeText={setResultadoReal}
-                multiline
-                numberOfLines={2}
-              />
-            </View>
-
-            {/* Campo: Observación / evidencia (SIN PLACEHOLDER) */}
-            <View style={styles.formGroup}>
-              <Text style={styles.fieldLabel}>Observación o Detalle de Evidencia</Text>
-              <TextInput
-                style={[styles.textInput, styles.textArea]}
-                value={observacion}
-                onChangeText={setObservacion}
+                value={comentario}
+                onChangeText={setComentario}
                 multiline
                 numberOfLines={2}
               />
             </View>
           </ScrollView>
 
-          {/* Botones de acción sin signos '+' */}
-          <View style={styles.modalFooter}>
+          <View style={[styles.modalFooter, { paddingBottom: Math.max(insets.bottom, 24) }]}>
             <TouchableOpacity
               onPress={onClose}
               style={styles.cancelActionBtn}
@@ -354,17 +349,16 @@ export default function ActivityModal({
               activeOpacity={0.7}
             >
               <Text style={styles.saveActionText}>
-                {isEditing ? 'Guardar Cambios' : 'Guardar Actividad'}
+                {isEditing ? 'Guardar cambios' : 'Guardar actividad'}
               </Text>
             </TouchableOpacity>
           </View>
         </View>
       </KeyboardAvoidingView>
 
-      {/* Selector modal de hora de inicio */}
       <CustomTimePicker
         visible={timePickerTarget === 'inicio'}
-        title="Hora de Inicio"
+        title="Hora de inicio"
         currentTime={horaInicio}
         onConfirm={(timeStr) => {
           setHoraInicio(timeStr);
@@ -373,10 +367,9 @@ export default function ActivityModal({
         onCancel={() => setTimePickerTarget(null)}
       />
 
-      {/* Selector modal de hora de fin */}
       <CustomTimePicker
         visible={timePickerTarget === 'fin'}
-        title="Hora de Fin"
+        title="Hora de fin"
         currentTime={horaFin}
         onConfirm={(timeStr) => {
           setHoraFin(timeStr);
@@ -399,7 +392,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '92%',
-    paddingBottom: 24,
+    paddingBottom: 0,
     elevation: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -3 },
@@ -433,6 +426,9 @@ const styles = StyleSheet.create({
   formScroll: {
     paddingHorizontal: 20,
     paddingTop: 12,
+  },
+  formScrollContent: {
+    paddingBottom: 40,
   },
   formGroup: {
     marginBottom: 14,
@@ -555,30 +551,6 @@ const styles = StyleSheet.create({
   },
   statusBtnTextInactive: {
     color: COLORS.textSecondary,
-  },
-  mandatoryJustificationBlock: {
-    backgroundColor: COLORS.dangerSoft,
-    padding: 12,
-    borderRadius: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: COLORS.danger,
-  },
-  mandatoryHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  mandatoryLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.dangerDark,
-    marginLeft: 6,
-  },
-  mandatoryInput: {
-    backgroundColor: COLORS.surface,
-    borderColor: COLORS.danger,
-    minHeight: 65,
-    textAlignVertical: 'top',
   },
   modalFooter: {
     flexDirection: 'row',

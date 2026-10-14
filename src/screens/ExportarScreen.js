@@ -1,4 +1,4 @@
-// Pantalla de Exportación Avanzada para WhatsApp (con checkboxes) y Excel (.xlsx) con 11 columnas
+// Pantalla de exportación para WhatsApp y Excel (.xlsx)
 import React, { useState, useMemo } from 'react';
 import {
   View,
@@ -15,7 +15,7 @@ import { COLORS } from '../constants/colors';
 import { useApp } from '../context/AppContext';
 import { getWeekDays } from '../utils/dateUtils';
 import { buildWhatsAppReportText, shareViaWhatsApp } from '../services/whatsappExportService';
-import { generateAndShareExcelReport, EXCEL_COLUMNS } from '../services/excelExportService';
+import { generateAndShareExcelReport } from '../services/excelExportService';
 import GlobalHeader from '../components/GlobalHeader';
 import WeekSelector from '../components/WeekSelector';
 
@@ -68,13 +68,47 @@ export default function ExportarScreen({ navigation }) {
     });
   }, [activities, selectedDays, profile, currentWeekLabel]);
 
+  // Validación de actividades pendientes antes de compartir
+  const checkPendingAndProceed = (actionCallback) => {
+    const uncompleted = activities.filter(
+      (act) => selectedDays.includes(act.fecha) && act.estado !== 'Cumplida'
+    );
+
+    if (uncompleted.length > 0) {
+      Alert.alert(
+        'Actividades pendientes',
+        `Tienes ${uncompleted.length} actividad(es) sin marcar como cumplida en los días seleccionados. ¿Deseas revisarlas o compartir de todos modos?`,
+        [
+          {
+            text: 'Revisar agenda',
+            style: 'cancel',
+            onPress: () => navigation.navigate('AgendaDiaria'),
+          },
+          {
+            text: 'Compartir de todos modos',
+            onPress: actionCallback,
+          },
+        ]
+      );
+    } else {
+      actionCallback();
+    }
+  };
+
   // Compartir en WhatsApp
   const handleShareWhatsApp = async () => {
     if (selectedDays.length === 0) {
-      Alert.alert('Selección Vacía', 'Debe seleccionar al menos un día para exportar.');
+      Alert.alert('Selección vacía', 'Debe seleccionar al menos un día para exportar.');
       return;
     }
-    await shareViaWhatsApp(whatsAppReportText);
+
+    checkPendingAndProceed(async () => {
+      try {
+        await shareViaWhatsApp(whatsAppReportText);
+      } catch (err) {
+        Alert.alert('Error al compartir', 'No se pudo compartir el reporte por WhatsApp.');
+      }
+    });
   };
 
   // Copiar al portapapeles
@@ -89,22 +123,28 @@ export default function ExportarScreen({ navigation }) {
 
   // Generar y exportar archivo Excel
   const handleExportExcel = async () => {
-    try {
-      setIsExportingExcel(true);
-      await generateAndShareExcelReport({
-        currentWeekActivities: activities,
-        nextWeekActivities: nextWeekActivities,
-        currentWeekLabel,
-        nextWeekLabel,
-        profile,
-        weekNumber: weekInfo.weekNumber,
-        weekYear: weekInfo.weekYear,
-      });
-    } catch (error) {
-      Alert.alert('Error al Exportar', 'Ocurrió un problema al generar la hoja de cálculo Excel.');
-    } finally {
-      setIsExportingExcel(false);
-    }
+    checkPendingAndProceed(async () => {
+      try {
+        setIsExportingExcel(true);
+        await generateAndShareExcelReport({
+          currentWeekActivities: activities,
+          nextWeekActivities: nextWeekActivities,
+          currentWeekLabel,
+          nextWeekLabel,
+          profile,
+          weekNumber: weekInfo.weekNumber,
+          weekYear: weekInfo.weekYear,
+        });
+      } catch (error) {
+        console.error('Error detallado exportando Excel:', error);
+        Alert.alert(
+          'Error al exportar',
+          `Ocurrió un problema al generar la hoja de cálculo Excel: ${error?.message || error}`
+        );
+      } finally {
+        setIsExportingExcel(false);
+      }
+    });
   };
 
   return (
@@ -129,12 +169,12 @@ export default function ExportarScreen({ navigation }) {
             <View style={styles.sectionTitleBlock}>
               <Text style={styles.sectionTitle}>Reporte para WhatsApp</Text>
               <Text style={styles.sectionSubtitle}>
-                Formato estructurado con Fecha, Actividad, Estado y Justificación
+                Formato estructurado con fecha, actividad, estado y observaciones
               </Text>
             </View>
           </View>
 
-          {/* Selector de días con Checkboxes */}
+          {/* Selector de días con checkboxes */}
           <Text style={styles.subsectionTitle}>Seleccione los días a incluir:</Text>
           <View style={styles.checkboxGrid}>
             {weekDays.map((d) => {
@@ -155,39 +195,53 @@ export default function ExportarScreen({ navigation }) {
                     color={isChecked ? COLORS.primary : COLORS.textMuted}
                   />
                   <Text style={[styles.checkboxLabel, isChecked && styles.checkboxLabelActive]}>
-                    {d.dayName} ({d.shortFormattedDate.substring(0, 5)})
+                    {d.dayName}
                   </Text>
                 </TouchableOpacity>
               );
             })}
           </View>
 
-          {/* Botones de selección rápida */}
-          <View style={styles.quickSelectRow}>
-            <TouchableOpacity onPress={selectAllDays} style={styles.textActionBtn} activeOpacity={0.7}>
-              <Text style={styles.textActionBtnLabel}>Seleccionar todos</Text>
+          {/* Botones de acción rápida con diseño claro */}
+          <View style={styles.quickButtonsRow}>
+            <TouchableOpacity onPress={selectAllDays} style={styles.quickActionButton} activeOpacity={0.7}>
+              <Ionicons name="checkmark-done-outline" size={14} color={COLORS.primary} style={styles.quickBtnIcon} />
+              <Text style={styles.quickActionLabel}>Seleccionar todos</Text>
             </TouchableOpacity>
-            <Text style={styles.dividerDot}>•</Text>
-            <TouchableOpacity onPress={clearAllDays} style={styles.textActionBtn} activeOpacity={0.7}>
-              <Text style={styles.textActionBtnLabel}>Limpiar selección</Text>
+
+            <TouchableOpacity onPress={clearAllDays} style={styles.quickActionButton} activeOpacity={0.7}>
+              <Ionicons name="close-circle-outline" size={14} color={COLORS.textSecondary} style={styles.quickBtnIcon} />
+              <Text style={[styles.quickActionLabel, { color: COLORS.textSecondary }]}>Limpiar selección</Text>
             </TouchableOpacity>
-            <Text style={styles.dividerDot}>•</Text>
+
             <TouchableOpacity
               onPress={() => setShowPreview(!showPreview)}
-              style={styles.textActionBtn}
+              style={[styles.quickActionButton, showPreview && styles.quickActionActive]}
               activeOpacity={0.7}
             >
-              <Text style={styles.textActionBtnLabel}>
+              <Ionicons
+                name={showPreview ? 'eye-off-outline' : 'eye-outline'}
+                size={14}
+                color={showPreview ? COLORS.surface : COLORS.primary}
+                style={styles.quickBtnIcon}
+              />
+              <Text style={[styles.quickActionLabel, showPreview && { color: COLORS.surface }]}>
                 {showPreview ? 'Ocultar vista previa' : 'Ver vista previa'}
               </Text>
             </TouchableOpacity>
           </View>
 
-          {/* Vista previa colapsable del texto */}
+          {/* Vista previa completa con scroll */}
           {showPreview && (
             <View style={styles.previewBox}>
               <Text style={styles.previewTitle}>Vista previa del mensaje:</Text>
-              <Text style={styles.previewContent}>{whatsAppReportText}</Text>
+              <ScrollView
+                style={styles.previewScroll}
+                nestedScrollEnabled={true}
+                showsVerticalScrollIndicator={true}
+              >
+                <Text style={styles.previewContent}>{whatsAppReportText}</Text>
+              </ScrollView>
             </View>
           )}
 
@@ -208,7 +262,7 @@ export default function ExportarScreen({ navigation }) {
               activeOpacity={0.7}
             >
               <Ionicons name="copy-outline" size={17} color={COLORS.primary} style={styles.btnIcon} />
-              <Text style={styles.secondaryActionBtnText}>Copiar Texto</Text>
+              <Text style={styles.secondaryActionBtnText}>Copiar texto</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -222,52 +276,17 @@ export default function ExportarScreen({ navigation }) {
               <Ionicons name="document-text-outline" size={20} color={COLORS.primary} />
             </View>
             <View style={styles.sectionTitleBlock}>
-              <Text style={styles.sectionTitle}>Reporte Oficial en Excel (.xlsx)</Text>
+              <Text style={styles.sectionTitle}>Reporte oficial en Excel (.xlsx)</Text>
               <Text style={styles.sectionSubtitle}>
-                Estructura reglamentaria de 11 columnas con saltos de línea (\n)
+                Tabla con lo ejecutado en la semana y planificación siguiente
               </Text>
             </View>
           </View>
 
-          {/* Detalle de estructura */}
-          <View style={styles.infoCardBlock}>
-            <View style={styles.infoPoint}>
-              <Ionicons name="checkmark-circle-outline" size={16} color={COLORS.success} />
-              <Text style={styles.infoPointText}>
-                <Text style={styles.boldText}>Parte Superior:</Text> Tabla con lo ejecutado en la {currentWeekLabel}.
-              </Text>
-            </View>
-
-            <View style={styles.infoPoint}>
-              <Ionicons name="checkmark-circle-outline" size={16} color={COLORS.success} />
-              <Text style={styles.infoPointText}>
-                <Text style={styles.boldText}>Parte Inferior:</Text> Tabla con la planificación de la semana siguiente ({nextWeekLabel}).
-              </Text>
-            </View>
-
-            <View style={styles.infoPoint}>
-              <Ionicons name="checkmark-circle-outline" size={16} color={COLORS.success} />
-              <Text style={styles.infoPointText}>
-                <Text style={styles.boldText}>Lógica estricta:</Text> Si es planificada llena "Actividad planificada"; si no, llena "Actividad NO Agendada".
-              </Text>
-            </View>
-          </View>
-
-          {/* Lista de las 11 columnas exactas */}
-          <Text style={styles.columnsListTitle}>11 Columnas Exactas Incluidas:</Text>
-          <View style={styles.columnsTagsWrap}>
-            {EXCEL_COLUMNS.map((col, idx) => (
-              <View key={col} style={styles.columnTag}>
-                <Text style={styles.columnTagIndex}>{idx + 1}.</Text>
-                <Text style={styles.columnTagLabel}>{col}</Text>
-              </View>
-            ))}
-          </View>
-
-          {/* Botón de Generación y Compartir de Excel */}
+          {/* Botón directo de generación y compartir */}
           <TouchableOpacity
             onPress={handleExportExcel}
-            style={[styles.primaryActionBtn, { backgroundColor: COLORS.primary }]}
+            style={[styles.primaryActionBtn, { backgroundColor: COLORS.primary, marginTop: 8 }]}
             disabled={isExportingExcel}
             activeOpacity={0.8}
           >
@@ -276,7 +295,7 @@ export default function ExportarScreen({ navigation }) {
             ) : (
               <>
                 <Ionicons name="download-outline" size={18} color={COLORS.surface} style={styles.btnIcon} />
-                <Text style={styles.primaryActionBtnText}>Generar y Compartir Archivo Excel</Text>
+                <Text style={styles.primaryActionBtnText}>Generar y compartir archivo Excel</Text>
               </>
             )}
           </TouchableOpacity>
@@ -344,7 +363,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   checkboxItem: {
     width: '48%',
@@ -371,22 +390,34 @@ const styles = StyleSheet.create({
     color: COLORS.primaryDark,
     fontWeight: '700',
   },
-  quickSelectRow: {
+  quickButtonsRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
     marginBottom: 14,
   },
-  textActionBtn: {
-    paddingVertical: 4,
+  quickActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
   },
-  textActionBtnLabel: {
+  quickActionActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  quickBtnIcon: {
+    marginRight: 4,
+  },
+  quickActionLabel: {
     fontSize: 11,
     color: COLORS.primary,
-    fontWeight: '700',
-  },
-  dividerDot: {
-    marginHorizontal: 8,
-    color: COLORS.textMuted,
+    fontWeight: '600',
   },
   previewBox: {
     backgroundColor: COLORS.background,
@@ -395,23 +426,24 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     marginBottom: 14,
-    maxHeight: 180,
   },
   previewTitle: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
     color: COLORS.textSecondary,
     marginBottom: 6,
   },
+  previewScroll: {
+    maxHeight: 220,
+  },
   previewContent: {
-    fontSize: 10,
+    fontSize: 11,
     color: COLORS.textPrimary,
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-    lineHeight: 14,
+    lineHeight: 16,
   },
   actionButtonsContainer: {
     gap: 10,
-    marginTop: 6,
+    marginTop: 4,
   },
   primaryActionBtn: {
     flexDirection: 'row',
@@ -444,62 +476,5 @@ const styles = StyleSheet.create({
   },
   btnIcon: {
     marginRight: 6,
-  },
-  infoCardBlock: {
-    backgroundColor: COLORS.primarySoft,
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 12,
-    gap: 8,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  infoPoint: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  infoPointText: {
-    fontSize: 12,
-    color: COLORS.primaryDark,
-    marginLeft: 8,
-    flex: 1,
-    lineHeight: 16,
-  },
-  boldText: {
-    fontWeight: '800',
-  },
-  columnsListTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.textSecondary,
-    marginBottom: 6,
-    textTransform: 'uppercase',
-  },
-  columnsTagsWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: 16,
-  },
-  columnTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.background,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  columnTagIndex: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: COLORS.primary,
-    marginRight: 4,
-  },
-  columnTagLabel: {
-    fontSize: 11,
-    color: COLORS.textPrimary,
-    fontWeight: '600',
   },
 });

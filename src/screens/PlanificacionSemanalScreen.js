@@ -7,6 +7,7 @@ import {
   FlatList,
   TouchableOpacity,
   Alert,
+  RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../constants/colors';
@@ -99,7 +100,7 @@ export default function PlanificacionSemanalScreen({ navigation }) {
 
   const handleDeleteActivity = (activity) => {
     Alert.alert(
-      'Confirmar Eliminación',
+      'Confirmar eliminación',
       `¿Desea eliminar la actividad "${activity.titulo}"?`,
       [
         { text: 'Cancelar', style: 'cancel' },
@@ -118,14 +119,33 @@ export default function PlanificacionSemanalScreen({ navigation }) {
     );
   };
 
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshActivities();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
-      <GlobalHeader title="Planificación Semanal" navigation={navigation} />
+      <GlobalHeader title="Planificación semanal" navigation={navigation} />
 
       <FlatList
         data={plannedDayActivities}
         keyExtractor={(item) => item.id}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={[COLORS.primary]}
+            tintColor={COLORS.primary}
+          />
+        }
         ListHeaderComponent={
           <View>
             {/* Selector de semanas con flechas */}
@@ -134,7 +154,7 @@ export default function PlanificacionSemanalScreen({ navigation }) {
             <View style={styles.bannerInfo}>
               <Ionicons name="information-circle-outline" size={18} color={COLORS.primary} />
               <Text style={styles.bannerText}>
-                Las actividades planificadas aquí se cargan automáticamente en la Agenda Diaria como "Planificadas".
+                Las actividades planificadas aquí se cargan automáticamente en la Agenda diaria como "Planificadas".
               </Text>
             </View>
 
@@ -149,7 +169,7 @@ export default function PlanificacionSemanalScreen({ navigation }) {
             <View style={styles.sectionHeader}>
               <View style={styles.dayInfoLeft}>
                 <Text style={styles.dayTitle}>
-                  {activeDay ? activeDay.formattedDisplay : 'Día Seleccionado'}
+                  {activeDay ? activeDay.formattedDisplay : 'Día seleccionado'}
                 </Text>
                 <Text style={styles.sortNoticeText}>
                   Orden cronológico normal (primera a última)
@@ -161,10 +181,10 @@ export default function PlanificacionSemanalScreen({ navigation }) {
                 onPress={handleOpenAddModal}
                 style={styles.addButton}
                 activeOpacity={0.8}
-                accessibilityLabel="Planificar Actividad"
+                accessibilityLabel="Planificar actividad"
               >
                 <Ionicons name="calendar-outline" size={16} color={COLORS.surface} style={styles.addBtnIcon} />
-                <Text style={styles.addButtonText}>Planificar Actividad</Text>
+                <Text style={styles.addButtonText}>Planificar actividad</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -174,6 +194,7 @@ export default function PlanificacionSemanalScreen({ navigation }) {
             activity={item}
             onEdit={handleOpenEditModal}
             onDelete={handleDeleteActivity}
+            // Sin onToggleStatus: en planificación semanal no se cambia estado
           />
         )}
         ListEmptyComponent={
@@ -183,7 +204,7 @@ export default function PlanificacionSemanalScreen({ navigation }) {
             </View>
             <Text style={styles.emptyTitle}>Sin planificación para este día</Text>
             <Text style={styles.emptySubtitle}>
-              Presione el botón "Planificar Actividad" para anticipar las tareas técnicas y coordinaciones de la jornada.
+              Presione el botón "Planificar actividad" para anticipar las tareas técnicas y coordinaciones de la jornada.
             </Text>
           </View>
         }
@@ -196,6 +217,7 @@ export default function PlanificacionSemanalScreen({ navigation }) {
         defaultDateStr={activeDay?.dateStr}
         defaultDayName={activeDay?.dayName}
         defaultIsPlanificada={true}
+        activitiesForValidation={plannedDayActivities}
         onSave={handleSaveActivity}
         onClose={handleCloseModal}
       />

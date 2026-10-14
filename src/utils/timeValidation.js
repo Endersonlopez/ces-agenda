@@ -1,12 +1,5 @@
-// Validación y formateo estricto de tiempos para Agenda CES
-
-export const MAX_WORKDAY_HOUR = 17;
-export const MAX_WORKDAY_MINUTE = 30;
-export const MAX_WORKDAY_MINUTES_TOTAL = MAX_WORKDAY_HOUR * 60 + MAX_WORKDAY_MINUTE; // 1050 minutos (17:30)
-
-export const MIN_WORKDAY_HOUR = 7;
-export const MIN_WORKDAY_MINUTE = 0;
-export const MIN_WORKDAY_MINUTES_TOTAL = MIN_WORKDAY_HOUR * 60 + MIN_WORKDAY_MINUTE; // 420 minutos (07:00)
+// Validación y formateo de tiempos para Agenda CES
+// Sin restricción de jornada mínima/máxima. Solo se valida que inicio < fin y no hay solapamiento.
 
 /**
  * Convierte una cadena HH:mm o Date a minutos desde la medianoche
@@ -44,7 +37,8 @@ export function formatTo12Hour(timeStr) {
 }
 
 /**
- * Valida estrictamente las horas de inicio y fin de una actividad
+ * Valida las horas de inicio y fin de una actividad.
+ * Solo se verifica que inicio < fin. No hay límite de jornada.
  * @param {string} startTime - 'HH:mm'
  * @param {string} endTime - 'HH:mm'
  * @returns {{ isValid: boolean, error: string | null }}
@@ -60,51 +54,50 @@ export function validateActivityTimes(startTime, endTime) {
   const startMin = timeStringToMinutes(startTime);
   const endMin = timeStringToMinutes(endTime);
 
-  // Validación: Hora de inicio debe ser estrictamente anterior a Hora de fin
   if (startMin >= endMin) {
     return {
       isValid: false,
-      error: 'La hora de inicio debe ser estrictamente anterior a la hora de fin.',
+      error: 'La hora de inicio debe ser anterior a la hora de fin.',
     };
   }
 
-  // Validación: Jornada máxima hasta las 17:30
-  if (endMin > MAX_WORKDAY_MINUTES_TOTAL) {
-    return {
-      isValid: false,
-      error: 'La actividad excede la jornada máxima permitida (hasta las 17:30).',
-    };
-  }
-
-  // Validación de inicio mínimo de jornada
-  if (startMin < MIN_WORKDAY_MINUTES_TOTAL) {
-    return {
-      isValid: false,
-      error: 'La hora de inicio no puede ser anterior a las 07:00.',
-    };
-  }
-
-  return {
-    isValid: true,
-    error: null,
-  };
+  return { isValid: true, error: null };
 }
 
 /**
- * Genera la lista de opciones válidas para el selector de horas (en intervalos de 15 minutos)
+ * Verifica si una actividad se solapa con alguna de las actividades existentes.
+ * @param {string} startTime - 'HH:mm' de la actividad nueva/editada
+ * @param {string} endTime - 'HH:mm' de la actividad nueva/editada
+ * @param {Array} existingActivities - Lista de actividades del mismo día
+ * @param {string|null} excludeId - ID de la actividad a ignorar (para edición)
+ * @returns {{ hasOverlap: boolean, conflictTitle: string | null }}
  */
-export function generateTimeSlots(stepMinutes = 15) {
-  const slots = [];
-  for (let m = MIN_WORKDAY_MINUTES_TOTAL; m <= MAX_WORKDAY_MINUTES_TOTAL; m += stepMinutes) {
-    const time24 = minutesToTimeString(m);
-    const time12 = formatTo12Hour(time24);
-    slots.push({
-      value: time24,
-      label24: time24,
-      label12: time12,
-      display: `${time24} (${time12})`,
-      minutes: m,
-    });
+export function checkTimeOverlap(startTime, endTime, existingActivities = [], excludeId = null) {
+  const newStart = timeStringToMinutes(startTime);
+  const newEnd = timeStringToMinutes(endTime);
+
+  for (const act of existingActivities) {
+    if (excludeId && act.id === excludeId) continue;
+
+    const actStart = timeStringToMinutes(act.horaInicio);
+    const actEnd = timeStringToMinutes(act.horaFin);
+
+    // Hay solapamiento si los rangos se intersectan
+    if (newStart < actEnd && newEnd > actStart) {
+      return { hasOverlap: true, conflictTitle: act.titulo || 'otra actividad' };
+    }
   }
-  return slots;
+
+  return { hasOverlap: false, conflictTitle: null };
+}
+
+/**
+ * Genera la lista de horas rápidas (00 a 23) para el selector de chips
+ */
+export function generateHourChips() {
+  const hours = [];
+  for (let h = 0; h <= 23; h++) {
+    hours.push(h);
+  }
+  return hours;
 }

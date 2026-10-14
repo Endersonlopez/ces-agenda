@@ -91,6 +91,7 @@ export async function addActivity(weekKey, activityData) {
       reprogramacion: activityData.reprogramacion || 'No',
       observacion: activityData.observacion || '',
       justificacion: activityData.justificacion || '',
+      comentario: activityData.comentario || '',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };

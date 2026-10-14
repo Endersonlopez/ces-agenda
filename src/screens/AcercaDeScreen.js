@@ -95,7 +95,7 @@ export default function AcercaDeScreen({ navigation }) {
           <View style={styles.ruleRow}>
             <Ionicons name="shield-checkmark-outline" size={16} color={COLORS.primary} />
             <Text style={styles.ruleText}>
-              Validación estricta de tiempos: Hora inicio strictly anterior a hora fin, con jornada máxima a las 17:30.
+              Validación estricta de tiempos: Hora inicio strictly anterior a hora fin, con jornada máxima a las 6:00 PM (18:00).
             </Text>
           </View>
 
@@ -115,7 +115,7 @@ export default function AcercaDeScreen({ navigation }) {
         </View>
 
         <Text style={styles.copyrightText}>
-          Centro de Especialistas de Servicios (CES) • Todos los derechos reservados
+          Centro Electrónico de Servicios (CES) • Todos los derechos reservados
         </Text>
       </ScrollView>
     </View>

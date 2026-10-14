@@ -5,6 +5,7 @@ const NOTIFICATIONS_STORAGE_KEY = '@agenda_ces_notifications_config';
 
 export const DEFAULT_NOTIFICATION_SETTINGS = {
   enabled: true,
+  activityAlertsEnabled: true, // Recordatorio de actividades (30 min antes)
   lvTime: '17:00',   // L-V 5:00 PM (Recordatorio enviar agenda)
   vieTime: '16:30',  // Viernes 4:30 PM (Recordatorio planificar semana)
   sabTime: '12:30',  // Sábado 12:30 PM (Cierre y envío)
@@ -21,6 +22,7 @@ export async function getNotificationSettings() {
     const parsed = JSON.parse(raw);
     return {
       enabled: parsed.enabled !== undefined ? parsed.enabled : true,
+      activityAlertsEnabled: parsed.activityAlertsEnabled !== undefined ? parsed.activityAlertsEnabled : true,
       lvTime: parsed.lvTime || '17:00',
       vieTime: parsed.vieTime || '16:30',
       sabTime: parsed.sabTime || '12:30',

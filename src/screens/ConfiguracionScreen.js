@@ -33,6 +33,9 @@ export default function ConfiguracionScreen({ navigation }) {
   const [notifEnabled, setNotifEnabled] = useState(
     notificationConfig ? notificationConfig.enabled : true
   );
+  const [activityAlertsEnabled, setActivityAlertsEnabled] = useState(
+    notificationConfig?.activityAlertsEnabled !== undefined ? notificationConfig.activityAlertsEnabled : true
+  );
   const [lvTime, setLvTime] = useState(notificationConfig?.lvTime || '17:00');
   const [vieTime, setVieTime] = useState(notificationConfig?.vieTime || '16:30');
   const [sabTime, setSabTime] = useState(notificationConfig?.sabTime || '12:30');
@@ -52,6 +55,7 @@ export default function ConfiguracionScreen({ navigation }) {
   useEffect(() => {
     if (notificationConfig) {
       setNotifEnabled(notificationConfig.enabled);
+      setActivityAlertsEnabled(notificationConfig.activityAlertsEnabled !== undefined ? notificationConfig.activityAlertsEnabled : true);
       setLvTime(notificationConfig.lvTime || '17:00');
       setVieTime(notificationConfig.vieTime || '16:30');
       setSabTime(notificationConfig.sabTime || '12:30');
@@ -61,11 +65,11 @@ export default function ConfiguracionScreen({ navigation }) {
   // Guardar perfil
   const handleSaveProfile = async () => {
     if (!nombre.trim()) {
-      Alert.alert('Campo Requerido', 'El nombre no puede estar vacío.');
+      Alert.alert('Campo requerido', 'El nombre no puede estar vacío.');
       return;
     }
     if (!apellido.trim()) {
-      Alert.alert('Campo Requerido', 'El apellido no puede estar vacío.');
+      Alert.alert('Campo requerido', 'El apellido no puede estar vacío.');
       return;
     }
 
@@ -91,6 +95,7 @@ export default function ConfiguracionScreen({ navigation }) {
       setIsSavingNotifs(true);
       await saveNotifications({
         enabled: notifEnabled,
+        activityAlertsEnabled,
         lvTime,
         vieTime,
         sabTime,
@@ -130,7 +135,7 @@ export default function ConfiguracionScreen({ navigation }) {
               <Ionicons name="person-outline" size={20} color={COLORS.primary} />
             </View>
             <View style={styles.sectionTitleBlock}>
-              <Text style={styles.sectionTitle}>Datos del Técnico</Text>
+              <Text style={styles.sectionTitle}>Datos del técnico</Text>
               <Text style={styles.sectionSubtitle}>
                 Información institucional que figurará en los reportes
               </Text>
@@ -161,7 +166,7 @@ export default function ConfiguracionScreen({ navigation }) {
 
           {/* Campo: Perfil (Picker: Ensamble, Cómputo, Impresión, Renta, Potencia) */}
           <View style={styles.formGroup}>
-            <Text style={styles.fieldLabel}>Perfil de Especialidad *</Text>
+            <Text style={styles.fieldLabel}>Perfil de especialidad *</Text>
             <View style={styles.pickerContainer}>
               <Picker
                 selectedValue={perfil}
@@ -184,7 +189,7 @@ export default function ConfiguracionScreen({ navigation }) {
             activeOpacity={0.8}
           >
             <Text style={styles.primaryButtonText}>
-              {isSavingProfile ? 'Guardando...' : 'Guardar Cambios de Perfil'}
+              {isSavingProfile ? 'Guardando...' : 'Guardar cambios de perfil'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -194,13 +199,18 @@ export default function ConfiguracionScreen({ navigation }) {
         {/* ==================================================== */}
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeaderRow}>
-            <View style={[styles.sectionIconBadge, { backgroundColor: COLORS.warningSoft }]}>
-              <Ionicons name="notifications-outline" size={20} color={COLORS.warning} />
-            </View>
+            <TouchableOpacity
+              onPress={handleTestNotification}
+              style={[styles.sectionIconBadge, { backgroundColor: COLORS.warningSoft }]}
+              activeOpacity={0.7}
+              accessibilityLabel="Probar notificación"
+            >
+              <Ionicons name="notifications" size={20} color={COLORS.warning} />
+            </TouchableOpacity>
             <View style={styles.sectionTitleBlock}>
-              <Text style={styles.sectionTitle}>Recordatorios Automáticos</Text>
+              <Text style={styles.sectionTitle}>Recordatorios automáticos</Text>
               <Text style={styles.sectionSubtitle}>
-                Notificaciones locales para envío de agendas y cierres
+                Toca la campana amarilla para enviar una notificación de prueba
               </Text>
             </View>
           </View>
@@ -208,7 +218,7 @@ export default function ConfiguracionScreen({ navigation }) {
           {/* Toggle Switch Activar / Desactivar */}
           <View style={styles.switchRow}>
             <View style={styles.switchLabelBlock}>
-              <Text style={styles.switchMainLabel}>Activar Notificaciones</Text>
+              <Text style={styles.switchMainLabel}>Activar notificaciones</Text>
               <Text style={styles.switchSubLabel}>
                 Recibir alertas en la barra de estado del dispositivo
               </Text>
@@ -221,11 +231,26 @@ export default function ConfiguracionScreen({ navigation }) {
             />
           </View>
 
-          {/* Horas configurables de los 3 recordatorios obligatorios */}
+          {/* Horas configurables */}
           <View style={[styles.scheduleSettingsBlock, !notifEnabled && styles.disabledBlock]}>
-            <Text style={styles.scheduleBlockTitle}>Horarios por Defecto Configurables:</Text>
+            <Text style={styles.scheduleBlockTitle}>Horarios por defecto configurables:</Text>
 
-            {/* 1. L-V Recordatorio enviar agenda */}
+            {/* 1. Recordatorio de actividades (30 min antes) */}
+            <View style={styles.scheduleItem}>
+              <View style={styles.scheduleInfo}>
+                <Text style={styles.scheduleName}>Recordatorio de actividades</Text>
+                <Text style={styles.scheduleDesc}>Avisar 30 minutos antes de cada actividad programada</Text>
+              </View>
+              <Switch
+                value={activityAlertsEnabled}
+                onValueChange={setActivityAlertsEnabled}
+                disabled={!notifEnabled}
+                trackColor={{ false: COLORS.border, true: COLORS.primaryLight }}
+                thumbColor={activityAlertsEnabled ? COLORS.primary : '#F4F3F4'}
+              />
+            </View>
+
+            {/* 2. L-V Recordatorio enviar agenda */}
             <View style={styles.scheduleItem}>
               <View style={styles.scheduleInfo}>
                 <Text style={styles.scheduleName}>Lunes a Viernes</Text>
@@ -243,7 +268,7 @@ export default function ConfiguracionScreen({ navigation }) {
               </TouchableOpacity>
             </View>
 
-            {/* 2. Viernes Recordatorio planificar semana */}
+            {/* 3. Viernes Recordatorio planificar semana */}
             <View style={styles.scheduleItem}>
               <View style={styles.scheduleInfo}>
                 <Text style={styles.scheduleName}>Viernes</Text>
@@ -261,7 +286,7 @@ export default function ConfiguracionScreen({ navigation }) {
               </TouchableOpacity>
             </View>
 
-            {/* 3. Sábado Cierre y envío */}
+            {/* 4. Sábado Cierre y envío */}
             <View style={styles.scheduleItem}>
               <View style={styles.scheduleInfo}>
                 <Text style={styles.scheduleName}>Sábado</Text>
@@ -280,7 +305,7 @@ export default function ConfiguracionScreen({ navigation }) {
             </View>
           </View>
 
-          {/* Botones de acción Notificaciones sin signos '+' */}
+          {/* Botón único de guardado */}
           <View style={styles.notifActions}>
             <TouchableOpacity
               onPress={handleSaveNotifications}
@@ -289,17 +314,8 @@ export default function ConfiguracionScreen({ navigation }) {
               activeOpacity={0.8}
             >
               <Text style={styles.primaryButtonText}>
-                {isSavingNotifs ? 'Guardando...' : 'Guardar Horarios de Notificación'}
+                {isSavingNotifs ? 'Guardando...' : 'Guardar horarios de notificación'}
               </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={handleTestNotification}
-              style={styles.outlineButton}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="paper-plane-outline" size={16} color={COLORS.primary} style={styles.btnIcon} />
-              <Text style={styles.outlineButtonText}>Probar Notificación Ahora</Text>
             </TouchableOpacity>
           </View>
         </View>

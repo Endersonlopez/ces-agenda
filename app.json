@@ -6,27 +6,34 @@
     "orientation": "portrait",
     "icon": "./assets/logo.png",
     "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/logo.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#002C6C"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.endersonlopez.agendaces"
     },
     "android": {
       "package": "com.endersonlopez.agendaces",
+      "softwareKeyboardLayoutMode": "pan",
       "adaptiveIcon": {
         "foregroundImage": "./assets/logo.png",
-        "backgroundColor": "#002C6C"
+        "backgroundColor": "#FFFFFF"
       },
       "permissions": [
-        "NOTIFICATIONS",
-        "SCHEDULE_EXACT_ALARM"
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.SCHEDULE_EXACT_ALARM",
+        "android.permission.USE_EXACT_ALARM",
+        "android.permission.VIBRATE",
+        "android.permission.RECEIVE_BOOT_COMPLETED"
       ]
     },
     "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/logo.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#002C6C"
+        }
+      ],
       "expo-sharing",
       "@react-native-community/datetimepicker",
       [
@@ -35,10 +42,16 @@
           "icon": "./assets/logo.png",
           "color": "#002C6C"
         }
-      ]
+      ],
+      "expo-font"
     ],
     "web": {
       "favicon": "./assets/logo.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "bbe51737-400a-4cc5-8b71-2f2cb1ce663e"
+      }
     }
   }
 }
