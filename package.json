@@ -36,5 +36,15 @@
   "devDependencies": {
     "@babel/core": "^7.29.7",
     "babel-preset-expo": "^57.0.13"
+  },
+  "expo": {
+    "install": {
+      "exclude": [
+        "expo",
+        "expo-notifications",
+        "expo-sharing",
+        "expo-splash-screen"
+      ]
+    }
   }
 }
