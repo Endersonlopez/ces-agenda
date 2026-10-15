@@ -177,27 +177,6 @@ export default function ActivityModal({
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-            <View style={styles.formGroup}>
-              <Text style={styles.fieldLabel}>Tipo de servicio o actividad</Text>
-              <View style={styles.pickerContainer}>
-                <Picker
-                  selectedValue={tipo}
-                  onValueChange={(val) => {
-                    setTipo(val);
-                    if (val === 'Almuerzo' && (!titulo || titulo === '')) {
-                      setTitulo('Almuerzo');
-                    }
-                  }}
-                  style={styles.pickerStyle}
-                  dropdownIconColor={COLORS.primary}
-                >
-                  {ACTIVITY_TYPES.map((t) => (
-                    <Picker.Item key={t} label={t} value={t} />
-                  ))}
-                </Picker>
-              </View>
-            </View>
-
             {!isAlmuerzo && (
               <>
                 <View style={styles.formGroup}>
@@ -220,6 +199,29 @@ export default function ActivityModal({
                 </View>
               </>
             )}
+
+            <View style={styles.formGroup}>
+              <Text style={styles.fieldLabel}>Tipo de servicio o actividad</Text>
+              <View style={styles.pickerContainer}>
+                <Picker
+                  selectedValue={tipo}
+                  onValueChange={(val) => {
+                    if (val === 'Almuerzo') {
+                      if (!titulo || titulo.trim() === '') setTitulo('Almuerzo');
+                    } else if (tipo === 'Almuerzo' && titulo === 'Almuerzo') {
+                      setTitulo('');
+                    }
+                    setTipo(val);
+                  }}
+                  style={styles.pickerStyle}
+                  dropdownIconColor={COLORS.primary}
+                >
+                  {ACTIVITY_TYPES.map((t) => (
+                    <Picker.Item key={t} label={t} value={t} />
+                  ))}
+                </Picker>
+              </View>
+            </View>
 
             <View style={styles.timeSectionBox}>
               <Text style={styles.sectionHeaderTitle}>Horario de ejecución</Text>
