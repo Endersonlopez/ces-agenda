@@ -16,6 +16,7 @@ import PlanificacionSemanalScreen from '../screens/PlanificacionSemanalScreen';
 import ExportarScreen from '../screens/ExportarScreen';
 import ConfiguracionScreen from '../screens/ConfiguracionScreen';
 import AcercaDeScreen from '../screens/AcercaDeScreen';
+import PapeleraScreen from '../screens/PapeleraScreen';
 
 const Drawer = createDrawerNavigator();
 
@@ -121,6 +122,16 @@ export default function DrawerNavigator() {
           drawerLabel: 'Exportar',
           drawerIcon: ({ color, size }) => (
             <Ionicons name="share-social-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Drawer.Screen
+        name="Papelera"
+        component={PapeleraScreen}
+        options={{
+          drawerLabel: 'Papelera',
+          drawerIcon: ({ color, size }) => (
+            <Ionicons name="trash-bin-outline" size={size} color={color} />
           ),
         }}
       />

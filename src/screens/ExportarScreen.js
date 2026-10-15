@@ -23,19 +23,23 @@ export default function ExportarScreen({ navigation }) {
   const {
     profile,
     weekInfo,
+    currentWeekKey,
     currentWeekLabel,
     nextWeekLabel,
     activities,
     nextWeekActivities,
+    markPendingAsIncompleted,
   } = useApp();
 
   const weekDays = useMemo(() => {
     return getWeekDays(weekInfo.weekNumber, weekInfo.weekYear);
   }, [weekInfo.weekNumber, weekInfo.weekYear]);
 
-  // Selección de días para WhatsApp (por defecto todos seleccionados)
+  // Selección de días para WhatsApp — por defecto solo el día actual
   const [selectedDays, setSelectedDays] = useState(() => {
-    return weekDays.map((d) => d.dateStr);
+    const today = new Date().toISOString().split('T')[0];
+    const todayInWeek = weekDays.find((d) => d.dateStr === today);
+    return todayInWeek ? [today] : [];
   });
 
   const [isExportingExcel, setIsExportingExcel] = useState(false);
@@ -71,22 +75,30 @@ export default function ExportarScreen({ navigation }) {
   // Validación de actividades pendientes antes de compartir
   const checkPendingAndProceed = (actionCallback) => {
     const uncompleted = activities.filter(
-      (act) => selectedDays.includes(act.fecha) && act.estado !== 'Cumplida'
+      (act) => selectedDays.includes(act.fecha) && act.estado === 'Pendiente'
     );
 
     if (uncompleted.length > 0) {
       Alert.alert(
         'Actividades pendientes',
-        `Tienes ${uncompleted.length} actividad(es) sin marcar como cumplida en los días seleccionados. ¿Deseas revisarlas o compartir de todos modos?`,
+        `Tienes ${uncompleted.length} actividad(es) aún en estado "Pendiente" en los días seleccionados. ¿Deseas revisarlas o enviar de todos modos?`,
         [
           {
             text: 'Revisar agenda',
             style: 'cancel',
-            onPress: () => navigation.navigate('AgendaDiaria'),
+            onPress: () => navigation.navigate('Agenda Diaria'),
           },
           {
-            text: 'Compartir de todos modos',
-            onPress: actionCallback,
+            text: 'Enviar de todos modos',
+            onPress: async () => {
+              // Marcar automáticamente como "No cumplida" las pendientes
+              try {
+                await markPendingAsIncompleted(selectedDays);
+              } catch (e) {
+                console.warn('No se pudo actualizar estado de pendientes:', e);
+              }
+              await actionCallback();
+            },
           },
         ]
       );
@@ -202,31 +214,39 @@ export default function ExportarScreen({ navigation }) {
             })}
           </View>
 
-          {/* Botones de acción rápida con diseño claro */}
+          {/* Botones de acción rápida — prominentes y con fondo coloreado */}
           <View style={styles.quickButtonsRow}>
-            <TouchableOpacity onPress={selectAllDays} style={styles.quickActionButton} activeOpacity={0.7}>
-              <Ionicons name="checkmark-done-outline" size={14} color={COLORS.primary} style={styles.quickBtnIcon} />
-              <Text style={styles.quickActionLabel}>Seleccionar todos</Text>
+            <TouchableOpacity
+              onPress={selectAllDays}
+              style={[styles.quickActionButton, styles.quickBtnSelect]}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="calendar-outline" size={16} color={COLORS.surface} style={styles.quickBtnIcon} />
+              <Text style={styles.quickActionLabelLight}>Seleccionar todo</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={clearAllDays} style={styles.quickActionButton} activeOpacity={0.7}>
-              <Ionicons name="close-circle-outline" size={14} color={COLORS.textSecondary} style={styles.quickBtnIcon} />
-              <Text style={[styles.quickActionLabel, { color: COLORS.textSecondary }]}>Limpiar selección</Text>
+            <TouchableOpacity
+              onPress={clearAllDays}
+              style={[styles.quickActionButton, styles.quickBtnClear]}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="backspace-outline" size={16} color={COLORS.surface} style={styles.quickBtnIcon} />
+              <Text style={styles.quickActionLabelLight}>Limpiar</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               onPress={() => setShowPreview(!showPreview)}
-              style={[styles.quickActionButton, showPreview && styles.quickActionActive]}
-              activeOpacity={0.7}
+              style={[styles.quickActionButton, showPreview ? styles.quickBtnHide : styles.quickBtnPreview]}
+              activeOpacity={0.8}
             >
               <Ionicons
-                name={showPreview ? 'eye-off-outline' : 'eye-outline'}
-                size={14}
-                color={showPreview ? COLORS.surface : COLORS.primary}
+                name={showPreview ? 'eye-off' : 'eye'}
+                size={16}
+                color={COLORS.surface}
                 style={styles.quickBtnIcon}
               />
-              <Text style={[styles.quickActionLabel, showPreview && { color: COLORS.surface }]}>
-                {showPreview ? 'Ocultar vista previa' : 'Ver vista previa'}
+              <Text style={styles.quickActionLabelLight}>
+                {showPreview ? 'Ocultar' : 'Vista previa'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -400,24 +420,43 @@ const styles = StyleSheet.create({
   quickActionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.background,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 8,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 2,
   },
-  quickActionActive: {
+  quickBtnSelect: {
     backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
+  },
+  quickBtnClear: {
+    backgroundColor: COLORS.textSecondary,
+  },
+  quickBtnPreview: {
+    backgroundColor: COLORS.success,
+  },
+  quickBtnHide: {
+    backgroundColor: '#6B7280',
   },
   quickBtnIcon: {
-    marginRight: 4,
+    marginRight: 5,
   },
   quickActionLabel: {
     fontSize: 11,
     color: COLORS.primary,
-    fontWeight: '600',
+    fontWeight: '700',
+  },
+  quickActionLabelLight: {
+    fontSize: 12,
+    color: COLORS.surface,
+    fontWeight: '700',
+  },
+  quickActionActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
   },
   previewBox: {
     backgroundColor: COLORS.background,

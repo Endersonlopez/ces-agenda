@@ -1,6 +1,7 @@
 // Tipos y estados estandarizados de actividades
 export const ACTIVITY_TYPES = [
   'Administrativo',
+  'Almuerzo',
   'Atención al cliente',
   'Atención de garantía',
   'Capacitación y asesoría',
@@ -11,9 +12,11 @@ export const ACTIVITY_TYPES = [
   'Instalación y configuración',
   'Mantenimiento correctivo',
   'Mantenimiento preventivo',
-  'Reparación',
-  'Soporte técnico',
   'Otro',
+  'Reparación',
+  'Seguimiento',
+  'Servicio',
+  'Soporte técnico',
 ];
 
 export const ACTIVITY_STATUS = {

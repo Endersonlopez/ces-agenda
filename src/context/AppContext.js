@@ -7,6 +7,11 @@ import {
   updateActivity,
   deleteActivity,
   calculateDashboardMetrics,
+  getTrashActivitiesByWeek,
+  restoreActivityFromTrash,
+  permanentlyDeleteFromTrash,
+  emptyTrashForWeek,
+  markPendingAsIncompletedInWeek,
 } from '../storage/activityStorage';
 import {
   getNotificationSettings,
@@ -42,6 +47,7 @@ export function AppProvider({ children }) {
 
   const [activities, setActivities] = useState([]);
   const [nextWeekActivities, setNextWeekActivities] = useState([]);
+  const [trashActivities, setTrashActivities] = useState([]);
   const [notificationConfig, setNotificationConfig] = useState(null);
 
   const currentWeekKey = getWeekKey(weekInfo.weekYear, weekInfo.weekNumber);
@@ -50,6 +56,16 @@ export function AppProvider({ children }) {
   const nextWeekCalculated = getNextWeekInfo(weekInfo.weekNumber, weekInfo.weekYear);
   const nextWeekKey = getWeekKey(nextWeekCalculated.weekYear, nextWeekCalculated.weekNumber);
   const nextWeekLabel = formatWeekLabel(nextWeekCalculated.weekNumber, nextWeekCalculated.weekYear);
+
+  // Cargar actividades de la papelera para la semana activa
+  const refreshTrash = useCallback(async () => {
+    try {
+      const trashList = await getTrashActivitiesByWeek(currentWeekKey);
+      setTrashActivities(trashList);
+    } catch (e) {
+      console.error('Error al refrescar papelera:', e);
+    }
+  }, [currentWeekKey]);
 
   // Cargar actividades de la semana activa y de la semana siguiente
   const refreshActivities = useCallback(async () => {
@@ -85,10 +101,11 @@ export function AppProvider({ children }) {
     initApp();
   }, []);
 
-  // Recargar actividades cuando cambie la semana
+  // Recargar actividades y papelera cuando cambie la semana
   useEffect(() => {
     refreshActivities();
-  }, [refreshActivities]);
+    refreshTrash();
+  }, [refreshActivities, refreshTrash]);
 
   // Métricas de la semana actual
   const dashboardMetrics = calculateDashboardMetrics(activities);
@@ -137,8 +154,34 @@ export function AppProvider({ children }) {
   const handleDeleteActivity = async (activityId, targetWeekKey = currentWeekKey) => {
     await deleteActivity(targetWeekKey, activityId);
     await refreshActivities();
+    await refreshTrash();
     const updatedList = await getActivitiesByWeek(currentWeekKey);
     rescheduleAllActivityReminders(updatedList).catch(console.warn);
+  };
+
+  // Gestión de papelera
+  const handleRestoreFromTrash = async (activityId, targetWeekKey = currentWeekKey) => {
+    const restored = await restoreActivityFromTrash(targetWeekKey, activityId);
+    await refreshActivities();
+    await refreshTrash();
+    return restored;
+  };
+
+  const handlePermanentlyDelete = async (activityId, targetWeekKey = currentWeekKey) => {
+    await permanentlyDeleteFromTrash(targetWeekKey, activityId);
+    await refreshTrash();
+  };
+
+  const handleEmptyTrash = async (targetWeekKey = currentWeekKey) => {
+    await emptyTrashForWeek(targetWeekKey);
+    await refreshTrash();
+  };
+
+  // Marcar como No cumplida actividades Pendientes al enviar de todos modos
+  const handleMarkPendingAsIncompleted = async (dateStrings, targetWeekKey = currentWeekKey) => {
+    const updated = await markPendingAsIncompletedInWeek(targetWeekKey, dateStrings);
+    await refreshActivities();
+    return updated;
   };
 
   // Gestión de notificaciones
@@ -170,6 +213,13 @@ export function AppProvider({ children }) {
         addActivity: handleAddActivity,
         updateActivity: handleUpdateActivity,
         deleteActivity: handleDeleteActivity,
+        // Papelera de reciclaje
+        trashActivities,
+        refreshTrash,
+        restoreFromTrash: handleRestoreFromTrash,
+        permanentlyDelete: handlePermanentlyDelete,
+        emptyTrash: handleEmptyTrash,
+        markPendingAsIncompleted: handleMarkPendingAsIncompleted,
         notificationConfig,
         saveNotifications: handleSaveNotifications,
       }}

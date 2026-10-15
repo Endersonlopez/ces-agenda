@@ -75,10 +75,12 @@ export default function ActivityModal({
     }
   }, [activityToEdit, visible, defaultIsPlanificada]);
 
+  const isAlmuerzo = tipo === 'Almuerzo';
+
   // Manejo de guardado con validaciones
   const handleValidateAndSave = () => {
-    // 1. Título obligatorio
-    if (!titulo.trim()) {
+    // 1. Título obligatorio si no es Almuerzo
+    if (!isAlmuerzo && !titulo.trim()) {
       Alert.alert('Campo requerido', 'Debe ingresar la descripción o título de la actividad.');
       return;
     }
@@ -118,8 +120,8 @@ export default function ActivityModal({
       ...(activityToEdit || {}),
       fecha: activityToEdit ? activityToEdit.fecha : defaultDateStr,
       diaSemana: activityToEdit ? activityToEdit.diaSemana : defaultDayName,
-      titulo: titulo.trim(),
-      clienteOT: clienteOT.trim(),
+      titulo: isAlmuerzo ? 'Almuerzo' : titulo.trim(),
+      clienteOT: isAlmuerzo ? '' : clienteOT.trim(),
       tipo,
       horaInicio,
       horaFin,
@@ -127,7 +129,7 @@ export default function ActivityModal({
       estado: esPlanificada ? ACTIVITY_STATUS.PENDING : estado,
       reprogramacion: (!esPlanificada && estado === ACTIVITY_STATUS.INCOMPLETED) ? reprogramacion : 'No',
       observacion: (!esPlanificada && estado === ACTIVITY_STATUS.INCOMPLETED) ? observacion.trim() : '',
-      comentario: comentario.trim(),
+      comentario: isAlmuerzo ? '' : comentario.trim(),
       esPlanificada,
     };
 
@@ -176,30 +178,16 @@ export default function ActivityModal({
             keyboardShouldPersistTaps="handled"
           >
             <View style={styles.formGroup}>
-              <Text style={styles.fieldLabel}>Actividad o tarea principal *</Text>
-              <TextInput
-                style={styles.textInput}
-                value={titulo}
-                onChangeText={setTitulo}
-                multiline
-              />
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.fieldLabel}>Cliente / OT / LLS</Text>
-              <TextInput
-                style={styles.textInput}
-                value={clienteOT}
-                onChangeText={setClienteOT}
-              />
-            </View>
-
-            <View style={styles.formGroup}>
               <Text style={styles.fieldLabel}>Tipo de servicio o actividad</Text>
               <View style={styles.pickerContainer}>
                 <Picker
                   selectedValue={tipo}
-                  onValueChange={(val) => setTipo(val)}
+                  onValueChange={(val) => {
+                    setTipo(val);
+                    if (val === 'Almuerzo' && (!titulo || titulo === '')) {
+                      setTitulo('Almuerzo');
+                    }
+                  }}
                   style={styles.pickerStyle}
                   dropdownIconColor={COLORS.primary}
                 >
@@ -209,6 +197,29 @@ export default function ActivityModal({
                 </Picker>
               </View>
             </View>
+
+            {!isAlmuerzo && (
+              <>
+                <View style={styles.formGroup}>
+                  <Text style={styles.fieldLabel}>Actividad o tarea principal *</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    value={titulo}
+                    onChangeText={setTitulo}
+                    multiline
+                  />
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={styles.fieldLabel}>Cliente / OT / LLS</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    value={clienteOT}
+                    onChangeText={setClienteOT}
+                  />
+                </View>
+              </>
+            )}
 
             <View style={styles.timeSectionBox}>
               <Text style={styles.sectionHeaderTitle}>Horario de ejecución</Text>
@@ -321,17 +332,19 @@ export default function ActivityModal({
               </>
             )}
 
-            {/* Campo Comentarios: siempre visible, sin placeholder */}
-            <View style={styles.formGroup}>
-              <Text style={styles.fieldLabel}>Comentarios</Text>
-              <TextInput
-                style={[styles.textInput, styles.textArea]}
-                value={comentario}
-                onChangeText={setComentario}
-                multiline
-                numberOfLines={2}
-              />
-            </View>
+            {/* Campo Comentarios: visible solo si no es Almuerzo */}
+            {!isAlmuerzo && (
+              <View style={styles.formGroup}>
+                <Text style={styles.fieldLabel}>Comentarios</Text>
+                <TextInput
+                  style={[styles.textInput, styles.textArea]}
+                  value={comentario}
+                  onChangeText={setComentario}
+                  multiline
+                  numberOfLines={2}
+                />
+              </View>
+            )}
           </ScrollView>
 
           <View style={[styles.modalFooter, { paddingBottom: Math.max(insets.bottom, 24) }]}>

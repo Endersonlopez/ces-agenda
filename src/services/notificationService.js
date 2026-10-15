@@ -5,10 +5,12 @@ import { getNotificationSettings } from '../storage/notificationStorage';
 import { formatTo12Hour } from '../utils/timeValidation';
 
 // Configurar cómo se manejan las notificaciones cuando la app está en primer plano
+// SDK 57+: shouldShowAlert fue dividido en shouldShowBanner + shouldShowList
 try {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
-      shouldShowAlert: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
       shouldPlaySound: true,
       shouldSetBadge: false,
     }),
@@ -57,7 +59,9 @@ export async function requestNotificationPermissions() {
 }
 
 /**
- * Programa los 3 recordatorios generales (envío de agenda, planificación, cierre).
+ * Programa los recordatorios generales (agenda diaria L-S y planificación semanal Vie/Sáb).
+ * Usa triggers WEEKLY y DAILY que son más robustos en Android que CALENDAR con weekday.
+ * Weekday numbering: 1=Domingo, 2=Lunes, 3=Martes, 4=Miércoles, 5=Jueves, 6=Viernes, 7=Sábado
  */
 export async function setupScheduledNotifications() {
   if (Platform.OS === 'web') return;
@@ -85,60 +89,81 @@ export async function setupScheduledNotifications() {
     const [vieH, vieM] = settings.vieTime.split(':').map(Number);
     const [sabH, sabM] = settings.sabTime.split(':').map(Number);
 
-    // 1. Lunes a Viernes: Recordatorio enviar agenda
-    const weekdays = [2, 3, 4, 5, 6];
-    for (const wd of weekdays) {
+    // 1. Lunes a Viernes: Recordatorio de enviar agenda diaria (WEEKLY por cada día)
+    // Weekdays: 2=Lunes, 3=Martes, 4=Miércoles, 5=Jueves, 6=Viernes
+    const weekdayNumbers = [2, 3, 4, 5, 6]; // Lunes=2 ... Viernes=6
+    const weekdayNames = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
+
+    for (let i = 0; i < weekdayNumbers.length; i++) {
       await Notifications.scheduleNotificationAsync({
         content: {
           title: 'Recordatorio Agenda CES',
-          body: 'Hora de enviar tu agenda diaria ejecutada del día.',
+          body: `${weekdayNames[i]}: Hora de enviar tu agenda diaria ejecutada del día.`,
           sound: 'default',
           channelId: 'agenda-ces-alerts',
-          data: { type: 'general_reminder' },
+          data: { type: 'general_reminder', subtype: 'agenda_diaria' },
         },
         trigger: {
-          type: 'calendar',
-          weekday: wd,
+          type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
+          weekday: weekdayNumbers[i],
           hour: lvH,
           minute: lvM,
-          repeats: true,
+          channelId: 'agenda-ces-alerts',
         },
       });
     }
 
-    // 2. Viernes: Recordatorio planificar semana
+    // 2. Sábado: Recordatorio de enviar agenda del sábado
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Recordatorio Agenda CES',
+        body: 'Sábado: Hora de enviar tu agenda diaria ejecutada del día.',
+        sound: 'default',
+        channelId: 'agenda-ces-alerts',
+        data: { type: 'general_reminder', subtype: 'agenda_sabado' },
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
+        weekday: 7, // Sábado
+        hour: lvH,
+        minute: lvM,
+        channelId: 'agenda-ces-alerts',
+      },
+    });
+
+    // 3. Viernes: Recordatorio de planificar la semana siguiente (hora vieTime)
     await Notifications.scheduleNotificationAsync({
       content: {
         title: 'Planificación semanal CES',
         body: 'Viernes: Recuerda planificar la agenda técnica para la próxima semana.',
         sound: 'default',
         channelId: 'agenda-ces-alerts',
-        data: { type: 'general_reminder' },
+        data: { type: 'general_reminder', subtype: 'planificacion' },
       },
       trigger: {
-        type: 'calendar',
-        weekday: 6,
+        type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
+        weekday: 6, // Viernes
         hour: vieH,
         minute: vieM,
-        repeats: true,
+        channelId: 'agenda-ces-alerts',
       },
     });
 
-    // 3. Sábado: Cierre y envío
+    // 4. Sábado: Cierre y envío consolidado (hora sabTime)
     await Notifications.scheduleNotificationAsync({
       content: {
         title: 'Cierre y envío CES',
         body: 'Sábado: Realiza el cierre semanal de actividades y exporta tu reporte.',
         sound: 'default',
         channelId: 'agenda-ces-alerts',
-        data: { type: 'general_reminder' },
+        data: { type: 'general_reminder', subtype: 'cierre' },
       },
       trigger: {
-        type: 'calendar',
-        weekday: 7,
+        type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
+        weekday: 7, // Sábado
         hour: sabH,
         minute: sabM,
-        repeats: true,
+        channelId: 'agenda-ces-alerts',
       },
     });
 
@@ -195,9 +220,10 @@ export async function scheduleActivityReminder(activity) {
         data: { type: 'activity_reminder', activityId: activity.id },
       },
       trigger: {
-        type: 'timeInterval',
+        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
         seconds: secondsUntilReminder,
         repeats: false,
+        channelId: 'agenda-ces-alerts',
       },
     });
 

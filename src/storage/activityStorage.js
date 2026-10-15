@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { timeStringToMinutes } from '../utils/timeValidation';
 
 const WEEK_STORAGE_PREFIX = '@agenda_ces_week_';
+const TRASH_STORAGE_PREFIX = '@agenda_ces_trash_week_';
 const ALL_WEEKS_INDEX_KEY = '@agenda_ces_all_weeks_index';
 
 /**
@@ -137,16 +138,150 @@ export async function updateActivity(weekKey, activityId, updatedFields) {
 }
 
 /**
- * Elimina una actividad
+ * Obtiene todas las actividades en papelera de una semana específica
+ * @param {string} weekKey - Ej: '2026-W39'
+ * @returns {Promise<Array>} Lista de actividades en papelera
+ */
+export async function getTrashActivitiesByWeek(weekKey) {
+  try {
+    const key = `${TRASH_STORAGE_PREFIX}${weekKey}`;
+    const raw = await AsyncStorage.getItem(key);
+    if (!raw) {
+      return [];
+    }
+    const trash = JSON.parse(raw);
+    return Array.isArray(trash) ? trash : [];
+  } catch (error) {
+    console.error(`Error al cargar papelera de la semana ${weekKey}:`, error);
+    return [];
+  }
+}
+
+/**
+ * Guarda las actividades de papelera de una semana
+ */
+export async function saveTrashActivitiesForWeek(weekKey, trashActivities) {
+  try {
+    const key = `${TRASH_STORAGE_PREFIX}${weekKey}`;
+    await AsyncStorage.setItem(key, JSON.stringify(trashActivities));
+    await registerWeekIndex(weekKey);
+  } catch (error) {
+    console.error(`Error al guardar papelera de la semana ${weekKey}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Elimina una actividad moviéndola a la papelera de reciclaje
  */
 export async function deleteActivity(weekKey, activityId) {
   try {
     const activities = await getActivitiesByWeek(weekKey);
+    const itemToDelete = activities.find((a) => a.id === activityId);
     const filtered = activities.filter((a) => a.id !== activityId);
     await saveActivitiesForWeek(weekKey, filtered);
+
+    if (itemToDelete) {
+      const trash = await getTrashActivitiesByWeek(weekKey);
+      const trashItem = {
+        ...itemToDelete,
+        deletedAt: new Date().toISOString(),
+      };
+      // Prevenir duplicados en papelera
+      const updatedTrash = trash.filter((t) => t.id !== activityId);
+      updatedTrash.unshift(trashItem);
+      await saveTrashActivitiesForWeek(weekKey, updatedTrash);
+    }
     return true;
   } catch (error) {
-    console.error('Error eliminando actividad:', error);
+    console.error('Error eliminando actividad y moviendo a papelera:', error);
+    throw error;
+  }
+}
+
+/**
+ * Restaura una actividad de la papelera a la lista activa de la semana
+ */
+export async function restoreActivityFromTrash(weekKey, activityId) {
+  try {
+    const trash = await getTrashActivitiesByWeek(weekKey);
+    const itemToRestore = trash.find((a) => a.id === activityId);
+    if (!itemToRestore) {
+      throw new Error(`Actividad con id ${activityId} no encontrada en la papelera`);
+    }
+
+    // Quitar de la papelera
+    const updatedTrash = trash.filter((a) => a.id !== activityId);
+    await saveTrashActivitiesForWeek(weekKey, updatedTrash);
+
+    // Agregar de vuelta a actividades activas
+    const { deletedAt, ...cleanActivity } = itemToRestore;
+    cleanActivity.updatedAt = new Date().toISOString();
+
+    const activities = await getActivitiesByWeek(weekKey);
+    activities.push(cleanActivity);
+    await saveActivitiesForWeek(weekKey, activities);
+
+    return cleanActivity;
+  } catch (error) {
+    console.error('Error restaurando actividad de papelera:', error);
+    throw error;
+  }
+}
+
+/**
+ * Elimina definitivamente una actividad de la papelera
+ */
+export async function permanentlyDeleteFromTrash(weekKey, activityId) {
+  try {
+    const trash = await getTrashActivitiesByWeek(weekKey);
+    const filtered = trash.filter((a) => a.id !== activityId);
+    await saveTrashActivitiesForWeek(weekKey, filtered);
+    return true;
+  } catch (error) {
+    console.error('Error eliminando definitivamente de papelera:', error);
+    throw error;
+  }
+}
+
+/**
+ * Vacía por completo la papelera de una semana
+ */
+export async function emptyTrashForWeek(weekKey) {
+  try {
+    await saveTrashActivitiesForWeek(weekKey, []);
+    return true;
+  } catch (error) {
+    console.error('Error vaciando papelera de la semana:', error);
+    throw error;
+  }
+}
+
+/**
+ * Marca como 'No cumplida' todas las actividades con estado 'Pendiente' en los días seleccionados
+ */
+export async function markPendingAsIncompletedInWeek(weekKey, dateStrings = []) {
+  try {
+    const activities = await getActivitiesByWeek(weekKey);
+    let changed = false;
+    const updated = activities.map((act) => {
+      if (dateStrings.includes(act.fecha) && act.estado === 'Pendiente') {
+        changed = true;
+        return {
+          ...act,
+          estado: 'No cumplida',
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      return act;
+    });
+
+    if (changed) {
+      await saveActivitiesForWeek(weekKey, updated);
+    }
+    return updated;
+  } catch (error) {
+    console.error('Error marcando actividades pendientes como no cumplidas:', error);
     throw error;
   }
 }
